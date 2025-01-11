@@ -64,6 +64,7 @@ class Pwnangulator:
             return default
 
     def watch(self, mac):
+        """add mac address to the requests list in advertisement"""
         my_data = pwngrid.get_advertisement_data()
         watcher = my_data.get('identity')
         pwnang = self.decrypt_data(my_data.get('pwnangulate'))
@@ -75,6 +76,7 @@ class Pwnangulator:
         pwngrid.set_advertisement_data({'pwnangulate':self.encrypt_data(pwnang)})
 
     def unwatch(self, mac):
+        """remove mac address from the requests list in advertisement"""
         my_data = pwngrid.get_advertisement_data()
         watcher = my_data.get('identity')
         pwnang = self.decrypt_data(my_data.get('pwnangulate'))
@@ -85,8 +87,28 @@ class Pwnangulator:
                 if len(pwnang['req']) == 0:
                     del pwnang['req']
             pwngrid.set_advertisement_data({'pwnangulate':self.encrypt_data(pwnang)})
-    
+
+    def listVisibleMacs(self):
+        def devInfo(device, indent=""):
+            host = device.get('hostname', '-')
+            if host == '':
+                host = '-'
+            vendor = device.get('vendor', "-")
+            if vendor == '':
+                vendor = '-'
+            return "%s%4d\t%-20s\t%-30s\t%s\t%s" % (indent,
+                                                   device.get('rssi', -420),
+                                                   host[:19], vendor[:29],
+                                                   device.get('mac', '--:--:--:--:--:--'),
+                                                   device.get('last_seen', "--"))
+
+        for ap in self.bc.session("session/wifi").get('aps', []):
+            print("%s" % devInfo(ap, "AP "))
+            for cl in ap.get('clients', []):
+                print(devInfo(cl, "cl "))
+
     def updateWatchlist(self, advdata):
+        """collect watchlists from peers"""
         name = advdata.get('identity')
         pwnang = self.decrypt_data(advdata.get('pwnangulate'))
         
@@ -109,8 +131,10 @@ class Pwnangulator:
                     del self.watchlist[mac]         # remove mac from watchlist if no one watching
 
     def update_advertisement(self):
+        """gather AP info and update shared information in advertisements"""
         macs = self.watchlist.keys()
-        logging.info("Looking for: %s" % macs)
+        if len(macs):
+            logging.info("Looking for: %s" % macs)
         rssi_stats = {}
         if len(macs):
             wifi_data = self.bc.session("session/wifi")
@@ -182,7 +206,7 @@ class Pwnangulator:
             data = interps[mac]
             dists = []
             if mac in my_aps:
-                logging.info("'%s' %s (%s)" % (my_aps[mac]['hostname'], mac, my_aps[mac]['vendor']))
+                logging.info("'%s' ch %s  %s (%s)" % (my_aps[mac]['hostname'], my_aps[mac]['channel'], mac, my_aps[mac]['vendor']))
             else:
                 logging.error("I DO NOT KNOW %s" % mac)
             for peer in data:
@@ -193,16 +217,13 @@ class Pwnangulator:
 
             if closest:
                 logging.info("CLOSEST: %s is closest to %s, %s" % (mac, closest['peer'], ', '.join(dists)))
-                
-            
-            
-            
+
     def daemon(self):
         """run pwnangulate daemon"""
         keepGoing = True
+        logging.info("Main loop starting")
         while keepGoing:
             self.main()
-            logging.info ("-------")
             time.sleep(5)
         
     
@@ -231,7 +252,7 @@ class Pwnangulator:
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "dw:u:p:", ["daemon", "watch='MAC'", "unwatch='MAC'", "password='encryption password'"])
+        opts, args = getopt.getopt(sys.argv[1:], "odlw:u:p:", ["daemon", "watch='MAC'", "unwatch='MAC'", "password='encryption password'"])
     except getopt.GetoptError as err:
         logging.exception(err)
         sys.exit(2)
@@ -239,20 +260,25 @@ if __name__ == "__main__":
     watchlist = []
     unwatchlist = []
     daemon = False
+    once = False
     password = "triangle"
     
+    p = Pwnangulator(password)
+
     for o, a in opts:
         if o in ('-d', '--daemon'):
             daemon = True
+        if o in ('-o', '--once'):
+            once = True
+        elif o in ('-l', '--list'):
+            p.listVisibleMacs()
         elif o in ('-w', '--watch'):
             watchlist.append(a)
         elif o in ('-u', '--unwatch'):
             unwatchlist.append(a)
         elif o in ('-p', '--password'):
             password = a
-
-
-    p = Pwnangulator(password)
+            p.password = a
 
     for mac in watchlist:
         p.watch(mac)
@@ -260,8 +286,8 @@ if __name__ == "__main__":
     for mac in unwatchlist:
         p.unwatch(mac)
     
-    if daemon:
-        p.daemon()
-    else:
+    if once:
         p.main()
+    elif daemon:
+        p.daemon()
 
