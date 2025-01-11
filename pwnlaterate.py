@@ -252,7 +252,7 @@ class Pwnangulator:
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "odlw:u:p:", ["daemon", "watch='MAC'", "unwatch='MAC'", "password='encryption password'"])
+        opts, args = getopt.getopt(sys.argv[1:], "odlsw:u:p:", ["once", "daemon", "list", "syslog", "watch='MAC'", "unwatch='MAC'", "password='encryption password'"])
     except getopt.GetoptError as err:
         logging.exception(err)
         sys.exit(2)
@@ -267,11 +267,17 @@ if __name__ == "__main__":
 
     for o, a in opts:
         if o in ('-d', '--daemon'):
+            syslog_handler = logging.handlers.SysLogHandler(address=('localhost', 514))
+            logger.addHandler(syslog_handler)
+            #logger.removeHandler(console_handler)
             daemon = True
         if o in ('-o', '--once'):
             once = True
         elif o in ('-l', '--list'):
             p.listVisibleMacs()
+        elif o in ('-s', '--syslog'):
+            syslog_handler = logging.handlers.SysLogHandler(address=('localhost', 514))
+            logger.addHandler(syslog_handler)
         elif o in ('-w', '--watch'):
             watchlist.append(a)
         elif o in ('-u', '--unwatch'):
